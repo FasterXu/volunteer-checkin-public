@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}{{ activity.name }} · 手机签到{% endblock %}
+
+{% block content %}
+<div class="mobile-shell">
+  <div class="mobile-hero">
+    <div class="eyebrow light">移动签到 · MOBILE CHECK-IN</div>
+    <h1>{{ activity.name }}</h1>
+    <p>{% if activity.location %}⌖ {{ activity.location }}{% endif %}</p>
+    <span class="state-badge mobile-state state-{{ activity.status }}">
+      {% if activity.status == 'active' %}● 正在签到{% elif activity.status == 'ended' %}■ 活动已结束{% else %}○ 签到未开始{% endif %}
+    </span>
+  </div>
+
+  <section class="mobile-card">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        <div class="result-message result-{{ category }}">
+          <strong>{% if category == 'success' %}✓{% elif category == 'danger' %}!{% else %}i{% endif %}</strong>
+          <span>{{ message }}</span>
+        </div>
+      {% endfor %}
+    {% endwith %}
+
+    <div class="step-title"><span>1</span><div><strong>核验个人信息</strong><small>请填写名单中登记的信息</small></div></div>
+    <form method="post" action="{{ url_for('submit_sign', code=activity.code) }}" class="sign-form">
+      <label class="form-label">姓名</label>
+      <input class="form-control form-control-lg" name="name" autocomplete="name" required placeholder="请输入姓名" {% if activity.status != 'active' %}disabled{% endif %}>
+      <label class="form-label">学号 / 工号</label>
+      <input class="form-control form-control-lg" name="identifier" required placeholder="请输入学号或工号" {% if activity.status != 'active' %}disabled{% endif %}>
+      <label class="form-label">手机号 <small>（名单已登记时用于辅助核验）</small></label>
+      <input class="form-control form-control-lg" name="phone" inputmode="tel" autocomplete="tel" placeholder="选填" {% if activity.status != 'active' %}disabled{% endif %}>
+      <label class="form-label">备注 <small>（选填）</small></label>
+      <textarea class="form-control" name="note" rows="2" maxlength="200" placeholder="如：现场岗位、特殊情况" {% if activity.status != 'active' %}disabled{% endif %}></textarea>
+      <button class="btn btn-success btn-lg w-100 sign-button" {% if activity.status != 'active' %}disabled{% endif %}>
+        {% if activity.status == 'active' %}确认签到{% else %}当前不可签到{% endif %}
+      </button>
+    </form>
+
+    <div class="privacy-note">🔒 信息仅用于本次活动身份核验，请勿将签到码转发给无关人员。</div>
+  </section>
+  <div class="mobile-code">活动签到码：<strong>{{ activity.code }}</strong></div>
+</div>
+{% endblock %}

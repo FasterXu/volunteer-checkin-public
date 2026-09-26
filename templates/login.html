@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}管理员登录 · 签到系统{% endblock %}
+
+{% block content %}
+<div class="login-shell">
+  <section class="panel login-card">
+    <div class="login-mark">签</div>
+    <div class="eyebrow">ADMIN ACCESS</div>
+    <h1>管理员登录</h1>
+    <p>请输入部署时设置的后台管理密码。</p>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        <div class="alert alert-{{ category }}">{{ message }}</div>
+      {% endfor %}
+    {% endwith %}
+    <form method="post">
+      <input type="hidden" name="next" value="{{ next }}">
+      <label class="form-label" for="adminPassword">管理员密码</label>
+      <input class="form-control form-control-lg" id="adminPassword" name="password" type="password" autocomplete="current-password" required autofocus>
+      <button class="btn btn-success btn-lg w-100 mt-3">进入管理后台</button>
+    </form>
+  </section>
+</div>
+{% endblock %}

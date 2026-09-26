@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+{% block title %}签到管理后台{% endblock %}
+
+{% block content %}
+<div class="container-xl py-4 py-lg-5">
+  <div class="page-title mb-4">
+    <div class="title-icon">☷</div>
+    <div>
+      <h1>志愿者现场与电子签到中心</h1>
+      <p>Volunteers Sign and On-Site Management System</p>
+    </div>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+      <div class="alert alert-{{ category }} shadow-sm" role="alert">{{ message }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <div class="row g-4">
+    <aside class="col-lg-3">
+      <section class="panel sticky-lg-top side-panel">
+        <div class="panel-heading d-flex align-items-center justify-content-between">
+          <span>活动列表</span>
+          <span class="count-pill">{{ activities|length }}</span>
+        </div>
+        <div class="activity-list">
+          {% for item in activities %}
+          <a class="activity-item {% if activity and item.id == activity.id %}active{% endif %}"
+             href="{{ url_for('admin', activity_id=item.id) }}">
+            <div class="d-flex justify-content-between align-items-start gap-2">
+              <strong>{{ item.name }}</strong>
+              <span class="status-dot status-{{ item.status }}"></span>
+            </div>
+            <small>{{ item.location or '地点待定' }}</small>
+            <div class="mini-progress"><i style="width: {{ ((item.signed or 0) * 100 / item.total) if item.total else 0 }}%"></i></div>
+            <small>{{ item.signed or 0 }} / {{ item.total }} 人已签到</small>
+          </a>
+          {% else %}
+          <div class="empty-state compact">暂无活动，先在下方创建一个。</div>
+          {% endfor %}
+        </div>
+
+        <details class="create-box" {% if not activities %}open{% endif %}>
+          <summary>＋ 创建新活动</summary>
+          <form method="post" action="{{ url_for('create_activity') }}" class="pt-3">
+            <label class="form-label">活动名称 *</label>
+            <input class="form-control mb-2" name="name" required placeholder="例：地铁志愿服务">
+            <label class="form-label">地点</label>
+            <input class="form-control mb-2" name="location" placeholder="例：人民广场站">
+            <label class="form-label">开始时间</label>
+            <input class="form-control mb-2" type="datetime-local" name="start_time">
+            <label class="form-label">结束时间</label>
+            <input class="form-control mb-2" type="datetime-local" name="end_time">
+            <label class="form-label">活动说明</label>
+            <textarea class="form-control mb-3" name="description" rows="2"></textarea>
+            <button class="btn btn-success w-100">创建活动</button>
+          </form>
+        </details>
+      </section>
+    </aside>
+
+    <div class="col-lg-9">
+      {% if activity %}
+      <section class="panel hero-panel mb-4">
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+          <div>
+            <div class="eyebrow">当前活动</div>
+            <h2>{{ activity.name }}</h2>
+            <div class="event-meta">
+              <span>⌖ {{ activity.location or '地点待定' }}</span>
+              <span>◷ {{ activity.start_time|display_time }} 至 {{ activity.end_time|display_time }}</span>
+            </div>
+            {% if activity.description %}<p class="event-description">{{ activity.description }}</p>{% endif %}
+          </div>
+          <div class="text-lg-end">
+            <span class="state-badge state-{{ activity.status }}">
+              {% if activity.status == 'active' %}● 进行中{% elif activity.status == 'ended' %}■ 已结束{% else %}○ 准备中{% endif %}
+            </span>
+            <div class="code-line">签到码 <strong>{{ activity.code }}</strong></div>
+          </div>
+        </div>
+        <div class="event-actions mt-4">
+          <form method="post" action="{{ url_for('set_activity_status', activity_id=activity.id) }}">
+            <input type="hidden" name="status" value="active">
+            <button class="btn btn-success" {% if activity.status == 'active' %}disabled{% endif %}>▶ 开始活动</button>
+          </form>
+          <form method="post" action="{{ url_for('set_activity_status', activity_id=activity.id) }}">
+            <input type="hidden" name="status" value="ended">
+            <button class="btn btn-danger" {% if activity.status == 'ended' %}disabled{% endif %}>■ 结束活动</button>
+          </form>
+          <button class="btn btn-outline-success" type="button" id="toggleQr">▦ 显示签到二维码</button>
+          <button class="btn btn-outline-secondary" type="button" id="toggleActivityEdit">✎ 修改活动信息</button>
+        </div>
+        <div class="activity-edit-drawer" id="activityEditDrawer" hidden>
+          <form method="post" action="{{ url_for('edit_activity', activity_id=activity.id) }}">
+            <div class="drawer-title">修改活动信息</div>
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label">活动名称 *</label>
+                <input class="form-control" name="name" value="{{ activity.name }}" required>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">地点</label>
+                <input class="form-control" name="location" value="{{ activity.location }}">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">开始时间</label>
+                <input class="form-control" type="datetime-local" name="start_time" value="{{ activity.start_time or '' }}">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">结束时间</label>
+                <input class="form-control" type="datetime-local" name="end_time" value="{{ activity.end_time or '' }}">
+              </div>
+              <div class="col-12">
+                <label class="form-label">活动说明</label>
+                <textarea class="form-control" name="description" rows="2">{{ activity.description }}</textarea>
+              </div>
+              <div class="col-12 d-flex justify-content-end gap-2">
+                <button class="btn btn-outline-secondary" type="button" id="cancelActivityEdit">取消</button>
+                <button class="btn btn-success">保存修改</button>
+              </div>
+            </div>
+          </form>
+        </div>
+        <div class="qr-drawer" id="qrDrawer" hidden>
+          <img src="{{ url_for('activity_qr', activity_id=activity.id) }}" alt="活动签到二维码">
+          <div>
+            <strong>参与者扫码签到</strong>
+            <p>二维码内容会使用当前访问地址。部署到服务器时，可用 PUBLIC_BASE_URL 指定外网地址。</p>
+            <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('sign_page', code=activity.code) }}" target="_blank">打开手机签到页</a>
+            <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('activity_qr', activity_id=activity.id) }}" download>下载二维码</a>
+          </div>
+        </div>
+      </section>
+
+      <div class="stats-grid mb-4" aria-label="签到统计">
+        <article class="stat-card total"><span>名单总人数</span><strong id="statTotal">0</strong><small>人</small></article>
+        <article class="stat-card success"><span>已签到</span><strong id="statSigned">0</strong><small>人</small></article>
+        <article class="stat-card danger"><span>未签到</span><strong id="statUnsigned">0</strong><small>人</small></article>
+        <article class="stat-card rate"><span>签到率</span><strong id="statRate">0%</strong><div class="rate-bar"><i id="rateBar"></i></div></article>
+      </div>
+
+      <section class="panel mb-4">
+        <div class="panel-heading">名单导入</div>
+        <div class="panel-body">
+          <form class="upload-row" method="post" enctype="multipart/form-data" action="{{ url_for('upload_roster', activity_id=activity.id) }}">
+            <div>
+              <label class="form-label">上传 CSV / XLSX 名单</label>
+              <input class="form-control" type="file" name="roster" accept=".csv,.xlsx" required>
+              <small class="form-text">必填表头：姓名、学号/工号；可选：手机号。重复编号将更新资料并保留签到状态。</small>
+            </div>
+            <button class="btn btn-success">上传并导入</button>
+          </form>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading table-heading">
+          <span>签到记录</span>
+          <span class="live-indicator"><i></i> 每 5 秒自动刷新</span>
+        </div>
+        <div class="panel-body toolbar">
+          <div class="search-box">
+            <span>⌕</span>
+            <input id="searchInput" class="form-control" placeholder="搜索姓名、学号/工号或手机号">
+          </div>
+          <div class="btn-group filter-group" role="group">
+            <button class="btn btn-sm btn-outline-secondary active" data-filter="all">全部</button>
+            <button class="btn btn-sm btn-outline-success" data-filter="signed">已签到</button>
+            <button class="btn btn-sm btn-outline-danger" data-filter="unsigned">未签到</button>
+          </div>
+          <a id="exportLink" class="btn btn-sm btn-success ms-lg-auto" href="{{ url_for('export_results', activity_id=activity.id) }}">⇩ 导出结果</a>
+        </div>
+        <div class="table-responsive">
+          <table class="table sign-table mb-0">
+            <thead><tr><th>序号</th><th>姓名</th><th>学号/工号</th><th class="d-none d-md-table-cell">联系电话</th><th>签到状态</th><th class="d-none d-sm-table-cell">签到时间</th><th class="d-none d-lg-table-cell">来源 / 备注</th><th>操作</th></tr></thead>
+            <tbody id="participantRows"><tr><td colspan="8" class="loading-cell">正在载入名单…</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+      <dialog class="edit-dialog" id="participantDialog">
+        <form id="participantEditForm">
+          <div class="dialog-heading">
+            <div><strong>修改名单信息</strong><small>签到状态和签到时间不会改变</small></div>
+            <button type="button" class="dialog-close" id="closeParticipantDialog" aria-label="关闭">×</button>
+          </div>
+          <input type="hidden" id="editParticipantId">
+          <label class="form-label" for="editParticipantName">姓名 *</label>
+          <input class="form-control mb-3" id="editParticipantName" required>
+          <label class="form-label" for="editParticipantIdentifier">学号 / 工号 *</label>
+          <input class="form-control mb-3" id="editParticipantIdentifier" required>
+          <label class="form-label" for="editParticipantPhone">手机号</label>
+          <input class="form-control mb-3" id="editParticipantPhone" inputmode="tel">
+          <label class="form-label" for="editParticipantNote">备注</label>
+          <textarea class="form-control mb-3" id="editParticipantNote" rows="2" maxlength="200"></textarea>
+          <div class="dialog-error" id="participantEditError" hidden></div>
+          <div class="d-flex justify-content-end gap-2">
+            <button class="btn btn-outline-secondary" type="button" id="cancelParticipantEdit">取消</button>
+            <button class="btn btn-success" type="submit">保存修改</button>
+          </div>
+        </form>
+      </dialog>
+      {% else %}
+      <section class="panel empty-state">
+        <div class="empty-icon">☷</div>
+        <h2>创建第一场活动</h2>
+        <p>建立活动后即可导入名单、生成二维码并开始签到。</p>
+      </section>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if activity %}
+<script>
+window.SIGNIN_CONFIG = {
+  activityId: {{ activity.id }},
+  participantsUrl: {{ url_for('participants_api', activity_id=activity.id)|tojson }},
+  toggleUrlPattern: {{ url_for('toggle_participant', participant_id=0)|tojson }},
+  participantUrlPattern: {{ url_for('edit_participant', participant_id=0)|tojson }},
+  exportUrl: {{ url_for('export_results', activity_id=activity.id)|tojson }}
+};
+</script>
+<script src="{{ url_for('static', filename='admin.js') }}"></script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#173f34">
+  <title>{% block title %}签到管理系统{% endblock %}</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet">
+</head>
+<body>
+  <header class="site-header">
+    <nav class="navbar navbar-expand-lg navbar-dark container-xl">
+      <a class="navbar-brand d-flex align-items-center gap-2" {% if not public_page %}href="{{ url_for('admin') }}"{% endif %}>
+        <span class="brand-mark">签</span>
+        <span><strong>志愿签到</strong><small>Volunteer Check-in</small></span>
+      </a>
+      {% if not public_page %}<div class="ms-auto d-flex align-items-center gap-3">
+        <span class="nav-caption d-none d-sm-inline">现场与电子签到中心</span>
+        <a class="btn btn-sm btn-outline-light" href="{{ url_for('admin') }}">管理后台</a>
+        {% if auth_enabled %}<form method="post" action="{{ url_for('logout') }}"><button class="btn btn-sm btn-outline-light">退出</button></form>{% endif %}
+      </div>{% endif %}
+    </nav>
+  </header>
+
+  <main>{% block content %}{% endblock %}</main>
+
+  <footer class="site-footer">
+    <div class="footer-green"></div>
+    <div class="container-xl py-3 d-flex justify-content-between flex-wrap gap-2">
+      <span>Volunteer Sign &amp; On-Site Management System</span>
+      <span>轻量、实时、移动端适配</span>
+    </div>
+  </footer>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

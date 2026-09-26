@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: volunteer-checkin
+    runtime: docker
+    region: singapore
+    plan: free
+    numInstances: 1
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ADMIN_PASSWORD
+        sync: false
