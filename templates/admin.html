@@ -83,14 +83,22 @@
         <div class="event-actions mt-4">
           <form method="post" action="{{ url_for('set_activity_status', activity_id=activity.id) }}">
             <input type="hidden" name="status" value="active">
-            <button class="btn btn-success" {% if activity.status == 'active' %}disabled{% endif %}>▶ 开始活动</button>
+            <button class="btn btn-success activity-start-btn"
+                    {% if activity.status == 'active' %}disabled{% endif %}>
+              ▶ 开始活动
+            </button>
           </form>
           <form method="post" action="{{ url_for('set_activity_status', activity_id=activity.id) }}">
             <input type="hidden" name="status" value="ended">
-            <button class="btn btn-danger" {% if activity.status == 'ended' %}disabled{% endif %}>■ 结束活动</button>
+            <button class="btn btn-danger activity-end-btn"
+                    {% if activity.status == 'ended' %}disabled{% endif %}>
+              ■ 结束活动
+            </button>
           </form>
           <button class="btn btn-outline-success" type="button" id="toggleQr">▦ 显示签到二维码</button>
           <button class="btn btn-outline-secondary" type="button" id="toggleActivityEdit">✎ 修改活动信息</button>
+          <a class="btn btn-outline-secondary" href="{{ url_for('observer_page', token=activity.observer_token) }}" target="_blank" rel="noopener">◉ 观察员页面</a>
+          <button class="btn btn-outline-secondary" type="button" id="copyObserverLink" data-url="{{ url_for('observer_page', token=activity.observer_token) }}">复制观察员链接</button>
         </div>
         <div class="activity-edit-drawer" id="activityEditDrawer" hidden>
           <form method="post" action="{{ url_for('edit_activity', activity_id=activity.id) }}">
@@ -135,9 +143,9 @@
       </section>
 
       <div class="stats-grid mb-4" aria-label="签到统计">
-        <article class="stat-card total"><span>名单总人数</span><strong id="statTotal">0</strong><small>人</small></article>
-        <article class="stat-card success"><span>已签到</span><strong id="statSigned">0</strong><small>人</small></article>
-        <article class="stat-card danger"><span>未签到</span><strong id="statUnsigned">0</strong><small>人</small></article>
+        <article class="stat-card total active" data-filter="all" role="button" tabindex="0" aria-pressed="true"><span>名单总人数</span><strong id="statTotal">0</strong><small>人</small></article>
+        <article class="stat-card success" data-filter="signed" role="button" tabindex="0" aria-pressed="false"><span>已签到</span><strong id="statSigned">0</strong><small>人</small></article>
+        <article class="stat-card danger" data-filter="unsigned" role="button" tabindex="0" aria-pressed="false"><span>未签到</span><strong id="statUnsigned">0</strong><small>人</small></article>
         <article class="stat-card rate"><span>签到率</span><strong id="statRate">0%</strong><div class="rate-bar"><i id="rateBar"></i></div></article>
       </div>
 
@@ -148,7 +156,7 @@
             <div>
               <label class="form-label">上传 CSV / XLSX 名单</label>
               <input class="form-control" type="file" name="roster" accept=".csv,.xlsx" required>
-              <small class="form-text">必填表头：姓名、学号/工号；可选：手机号。重复编号将更新资料并保留签到状态。</small>
+              <small class="form-text">必填表头：姓名、学号/工号；可选：手机号、岗位。重复编号将更新资料并保留签到状态。</small>
             </div>
             <button class="btn btn-success">上传并导入</button>
           </form>
@@ -163,7 +171,7 @@
         <div class="panel-body toolbar">
           <div class="search-box">
             <span>⌕</span>
-            <input id="searchInput" class="form-control" placeholder="搜索姓名、学号/工号或手机号">
+            <input id="searchInput" class="form-control" placeholder="搜索姓名、学号/工号、手机号或岗位">
           </div>
           <div class="btn-group filter-group" role="group">
             <button class="btn btn-sm btn-outline-secondary active" data-filter="all">全部</button>
@@ -174,8 +182,18 @@
         </div>
         <div class="table-responsive">
           <table class="table sign-table mb-0">
-            <thead><tr><th>序号</th><th>姓名</th><th>学号/工号</th><th class="d-none d-md-table-cell">联系电话</th><th>签到状态</th><th class="d-none d-sm-table-cell">签到时间</th><th class="d-none d-lg-table-cell">来源 / 备注</th><th>操作</th></tr></thead>
-            <tbody id="participantRows"><tr><td colspan="8" class="loading-cell">正在载入名单…</td></tr></tbody>
+            <thead><tr>
+              <th data-sort-column="index" aria-sort="none"><button class="table-sort" type="button" data-sort="index">序号 <span aria-hidden="true">↕</span></button></th>
+              <th data-sort-column="name" aria-sort="none"><button class="table-sort" type="button" data-sort="name">姓名 <span aria-hidden="true">↕</span></button></th>
+              <th data-sort-column="identifier" aria-sort="none"><button class="table-sort" type="button" data-sort="identifier">学号/工号 <span aria-hidden="true">↕</span></button></th>
+              <th class="d-none d-md-table-cell" data-sort-column="phone" aria-sort="none"><button class="table-sort" type="button" data-sort="phone">联系电话 <span aria-hidden="true">↕</span></button></th>
+              <th data-sort-column="position" aria-sort="none"><button class="table-sort" type="button" data-sort="position">岗位 <span aria-hidden="true">↕</span></button></th>
+              <th data-sort-column="signed_in" aria-sort="none"><button class="table-sort" type="button" data-sort="signed_in">签到状态 <span aria-hidden="true">↕</span></button></th>
+              <th class="d-none d-sm-table-cell" data-sort-column="sign_time" aria-sort="none"><button class="table-sort" type="button" data-sort="sign_time">签到时间 <span aria-hidden="true">↕</span></button></th>
+              <th class="d-none d-lg-table-cell" data-sort-column="source_note" aria-sort="none"><button class="table-sort" type="button" data-sort="source_note">来源 / 备注 <span aria-hidden="true">↕</span></button></th>
+              <th>操作</th>
+            </tr></thead>
+            <tbody id="participantRows"><tr><td colspan="9" class="loading-cell">正在载入名单…</td></tr></tbody>
           </table>
         </div>
       </section>
@@ -193,6 +211,8 @@
           <input class="form-control mb-3" id="editParticipantIdentifier" required>
           <label class="form-label" for="editParticipantPhone">手机号</label>
           <input class="form-control mb-3" id="editParticipantPhone" inputmode="tel">
+          <label class="form-label" for="editParticipantPosition">岗位</label>
+          <input class="form-control mb-3" id="editParticipantPosition" maxlength="100">
           <label class="form-label" for="editParticipantNote">备注</label>
           <textarea class="form-control mb-3" id="editParticipantNote" rows="2" maxlength="200"></textarea>
           <div class="dialog-error" id="participantEditError" hidden></div>

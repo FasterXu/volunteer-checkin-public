@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}{{ activity.name }} · 观察员{% endblock %}
+
+{% block content %}
+<div class="container-xl py-4 observer-shell">
+  <section class="panel hero-panel mb-4">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+      <div>
+        <div class="eyebrow">OBSERVER VIEW · 实时只读</div>
+        <h1 class="observer-title">{{ activity.name }}</h1>
+        <div class="event-meta">
+          {% if activity.location %}<span>地点：{{ activity.location }}</span>{% endif %}
+          {% if activity.start_time %}<span>开始：{{ activity.start_time|display_time }}</span>{% endif %}
+          {% if activity.end_time %}<span>结束：{{ activity.end_time|display_time }}</span>{% endif %}
+        </div>
+        {% if activity.description %}<p class="event-description">{{ activity.description }}</p>{% endif %}
+      </div>
+      <span class="state-badge state-{{ activity.status }}">
+        {% if activity.status == 'active' %}● 正在签到{% elif activity.status == 'ended' %}■ 活动已结束{% else %}● 活动准备中{% endif %}
+      </span>
+    </div>
+    <div class="observer-notice">此页面为只读观察员视图。持有链接者可以查看并导出完整名单，请谨慎分享。</div>
+  </section>
+
+  <div class="stats-grid mb-4" aria-label="签到统计">
+    <article class="stat-card total active" data-filter="all" role="button" tabindex="0" aria-pressed="true"><span>名单总人数</span><strong id="statTotal">0</strong><small>人</small></article>
+    <article class="stat-card success" data-filter="signed" role="button" tabindex="0" aria-pressed="false"><span>已签到</span><strong id="statSigned">0</strong><small>人</small></article>
+    <article class="stat-card danger" data-filter="unsigned" role="button" tabindex="0" aria-pressed="false"><span>未签到</span><strong id="statUnsigned">0</strong><small>人</small></article>
+    <article class="stat-card rate"><span>签到率</span><strong id="statRate">0%</strong><div class="rate-bar"><i id="rateBar"></i></div></article>
+  </div>
+
+  <section class="panel">
+    <div class="panel-heading table-heading">
+      <span>签到记录</span>
+      <span class="live-indicator"><i></i> 每 5 秒自动刷新</span>
+    </div>
+    <div class="panel-body toolbar">
+      <div class="search-box">
+        <span>⌕</span>
+        <input id="searchInput" class="form-control" placeholder="搜索姓名、学号/工号、手机号或岗位">
+      </div>
+      <div class="btn-group filter-group" role="group">
+        <button class="btn btn-sm btn-outline-secondary active" data-filter="all">全部</button>
+        <button class="btn btn-sm btn-outline-success" data-filter="signed">已签到</button>
+        <button class="btn btn-sm btn-outline-danger" data-filter="unsigned">未签到</button>
+      </div>
+      <a id="exportLink" class="btn btn-sm btn-success ms-lg-auto" href="{{ url_for('observer_export_results', token=activity.observer_token) }}">⇩ 导出结果</a>
+    </div>
+    <div class="table-responsive">
+      <table class="table sign-table observer-table mb-0">
+        <thead><tr>
+          <th data-sort-column="index" aria-sort="none"><button class="table-sort" type="button" data-sort="index">序号 <span aria-hidden="true">↕</span></button></th>
+          <th data-sort-column="name" aria-sort="none"><button class="table-sort" type="button" data-sort="name">姓名 <span aria-hidden="true">↕</span></button></th>
+          <th data-sort-column="identifier" aria-sort="none"><button class="table-sort" type="button" data-sort="identifier">学号/工号 <span aria-hidden="true">↕</span></button></th>
+          <th data-sort-column="phone" aria-sort="none"><button class="table-sort" type="button" data-sort="phone">联系电话 <span aria-hidden="true">↕</span></button></th>
+          <th data-sort-column="position" aria-sort="none"><button class="table-sort" type="button" data-sort="position">岗位 <span aria-hidden="true">↕</span></button></th>
+          <th data-sort-column="signed_in" aria-sort="none"><button class="table-sort" type="button" data-sort="signed_in">签到状态 <span aria-hidden="true">↕</span></button></th>
+          <th data-sort-column="sign_time" aria-sort="none"><button class="table-sort" type="button" data-sort="sign_time">签到时间 <span aria-hidden="true">↕</span></button></th>
+          <th data-sort-column="source_note" aria-sort="none"><button class="table-sort" type="button" data-sort="source_note">来源 / 备注 <span aria-hidden="true">↕</span></button></th>
+        </tr></thead>
+        <tbody id="participantRows"><tr><td colspan="8" class="loading-cell">正在载入名单…</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+window.OBSERVER_CONFIG = {
+  participantsUrl: {{ url_for('observer_participants_api', token=activity.observer_token)|tojson }},
+  exportUrl: {{ url_for('observer_export_results', token=activity.observer_token)|tojson }}
+};
+</script>
+<script src="{{ url_for('static', filename='observer.js') }}"></script>
+{% endblock %}

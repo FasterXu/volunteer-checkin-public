@@ -4,6 +4,7 @@ import io
 import os
 import secrets
 import sqlite3
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
@@ -39,12 +40,20 @@ def csv_safe(value):
     return "'" + text if text.startswith(("=", "+", "-", "@")) else text
 
 
+@contextmanager
 def get_db():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     db = sqlite3.connect(DB_PATH, timeout=10)
     db.row_factory = sqlite3.Row
     db.execute("PRAGMA foreign_keys = ON")
-    return db
+    try:
+        yield db
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
 
 
 def init_db():
@@ -61,6 +70,7 @@ def init_db():
                 status TEXT NOT NULL DEFAULT 'draft'
                     CHECK(status IN ('draft', 'active', 'ended')),
                 code TEXT NOT NULL UNIQUE,
+                observer_token TEXT NOT NULL,
                 created_at TEXT NOT NULL
             );
 
@@ -70,6 +80,7 @@ def init_db():
                 name TEXT NOT NULL,
                 identifier TEXT NOT NULL,
                 phone TEXT NOT NULL DEFAULT '',
+                position TEXT NOT NULL DEFAULT '',
                 signed_in INTEGER NOT NULL DEFAULT 0 CHECK(signed_in IN (0, 1)),
                 sign_time TEXT,
                 source TEXT NOT NULL DEFAULT '',
@@ -82,6 +93,39 @@ def init_db():
             ON participants(activity_id, signed_in);
             """
         )
+        participant_columns = {
+            row["name"] for row in db.execute("PRAGMA table_info(participants)").fetchall()
+        }
+        if "position" not in participant_columns:
+            db.execute(
+                "ALTER TABLE participants ADD COLUMN position TEXT NOT NULL DEFAULT ''"
+            )
+        activity_columns = {
+            row["name"] for row in db.execute("PRAGMA table_info(activities)").fetchall()
+        }
+        if "observer_token" not in activity_columns:
+            db.execute(
+                "ALTER TABLE activities ADD COLUMN observer_token TEXT NOT NULL DEFAULT ''"
+            )
+        used_tokens = set()
+        activities = db.execute(
+            "SELECT id, observer_token FROM activities ORDER BY id"
+        ).fetchall()
+        for activity in activities:
+            token = activity["observer_token"] or ""
+            if not token or token in used_tokens:
+                token = secrets.token_urlsafe(24)
+                while token in used_tokens:
+                    token = secrets.token_urlsafe(24)
+                db.execute(
+                    "UPDATE activities SET observer_token = ? WHERE id = ?",
+                    (token, activity["id"]),
+                )
+            used_tokens.add(token)
+        db.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_activities_observer_token "
+            "ON activities(observer_token)"
+        )
 
 
 app = Flask(__name__)
@@ -90,7 +134,16 @@ app.config["MAX_CONTENT_LENGTH"] = 8 * 1024 * 1024
 init_db()
 
 
-PUBLIC_ENDPOINTS = {"sign_page", "submit_sign", "healthz", "static", "login"}
+PUBLIC_ENDPOINTS = {
+    "sign_page",
+    "submit_sign",
+    "observer_page",
+    "observer_participants_api",
+    "observer_export_results",
+    "healthz",
+    "static",
+    "login",
+}
 
 
 @app.before_request
@@ -111,6 +164,16 @@ def auth_context():
 def get_activity(activity_id):
     with get_db() as db:
         activity = db.execute("SELECT * FROM activities WHERE id = ?", (activity_id,)).fetchone()
+    if activity is None:
+        abort(404)
+    return activity
+
+
+def get_observer_activity(token):
+    with get_db() as db:
+        activity = db.execute(
+            "SELECT * FROM activities WHERE observer_token = ?", (token,)
+        ).fetchone()
     if activity is None:
         abort(404)
     return activity
@@ -141,6 +204,7 @@ HEADER_ALIASES = {
     "name": {"姓名", "名字", "name"},
     "identifier": {"学号", "工号", "学号/工号", "编号", "id", "identifier"},
     "phone": {"手机号", "手机", "联系电话", "电话", "phone", "mobile"},
+    "position": {"岗位", "职位", "职务", "position", "role"},
 }
 
 
@@ -166,11 +230,17 @@ def parse_roster(upload):
         identifier = values[indexes["identifier"]] if indexes["identifier"] < len(values) else ""
         phone_index = indexes.get("phone")
         phone = values[phone_index] if phone_index is not None and phone_index < len(values) else ""
+        position_index = indexes.get("position")
+        position = (
+            values[position_index]
+            if position_index is not None and position_index < len(values)
+            else ""
+        )
         if not name and not identifier:
             continue
         if not name or not identifier:
             raise ValueError(f"第 {line_number} 行缺少姓名或学号/工号。")
-        parsed.append((name, identifier, phone))
+        parsed.append((name, identifier, phone, position))
     if not parsed:
         raise ValueError("名单中没有有效数据。")
     return parsed
@@ -250,11 +320,15 @@ def create_activity():
         flash("请填写活动名称。", "danger")
         return redirect(url_for("admin"))
     code = secrets.token_urlsafe(6).replace("-", "").replace("_", "")[:8].upper()
+    observer_token = secrets.token_urlsafe(24)
     with get_db() as db:
         cursor = db.execute(
             """
-            INSERT INTO activities(name, location, description, start_time, end_time, status, code, created_at)
-            VALUES (?, ?, ?, ?, ?, 'draft', ?, ?)
+            INSERT INTO activities(
+                name, location, description, start_time, end_time, status,
+                code, observer_token, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?)
             """,
             (
                 name,
@@ -263,6 +337,7 @@ def create_activity():
                 request.form.get("start_time") or None,
                 request.form.get("end_time") or None,
                 code,
+                observer_token,
                 now_text(),
             ),
         )
@@ -334,17 +409,20 @@ def upload_roster(activity_id):
     try:
         rows = parse_roster(upload)
         with get_db() as db:
-            for name, identifier, phone in rows:
+            for name, identifier, phone, position in rows:
                 db.execute(
                     """
-                    INSERT INTO participants(activity_id, name, identifier, phone, updated_at)
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO participants(
+                        activity_id, name, identifier, phone, position, updated_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?)
                     ON CONFLICT(activity_id, identifier) DO UPDATE SET
                         name = excluded.name,
                         phone = excluded.phone,
+                        position = excluded.position,
                         updated_at = excluded.updated_at
                     """,
-                    (activity_id, name, identifier, phone, now_text()),
+                    (activity_id, name, identifier, phone, position, now_text()),
                 )
         flash(f"名单导入完成，共处理 {len(rows)} 人；重复编号已更新，签到状态予以保留。", "success")
     except (ValueError, OSError) as error:
@@ -408,7 +486,7 @@ def activity_qr(activity_id):
     qr = qrcode.QRCode(version=None, box_size=8, border=3)
     qr.add_data(sign_url)
     qr.make(fit=True)
-    image = qr.make_image(fill_color="#A40A1E", back_color="white")
+    image = qr.make_image(fill_color="#000000", back_color="white")
     buffer = io.BytesIO()
     image.save(buffer, format="PNG")
     buffer.seek(0)
@@ -420,6 +498,10 @@ def participants_api(activity_id):
     get_activity(activity_id)
     status = request.args.get("status", "all")
     search = request.args.get("q", "").strip()
+    return jsonify(participant_payload(activity_id, status, search))
+
+
+def participant_payload(activity_id, status="all", search=""):
     conditions = ["activity_id = ?"]
     params = [activity_id]
     if status == "signed":
@@ -427,9 +509,11 @@ def participants_api(activity_id):
     elif status == "unsigned":
         conditions.append("signed_in = 0")
     if search:
-        conditions.append("(name LIKE ? OR identifier LIKE ? OR phone LIKE ?)")
+        conditions.append(
+            "(name LIKE ? OR identifier LIKE ? OR phone LIKE ? OR position LIKE ?)"
+        )
         term = f"%{search}%"
-        params.extend([term, term, term])
+        params.extend([term, term, term, term])
     where = " AND ".join(conditions)
     with get_db() as db:
         counts = db.execute(
@@ -446,17 +530,44 @@ def participants_api(activity_id):
         ).fetchall()
     total = counts["total"] or 0
     signed = counts["signed"] or 0
-    return jsonify(
-        {
-            "summary": {
-                "total": total,
-                "signed": signed,
-                "unsigned": total - signed,
-                "rate": round(signed * 100 / total, 1) if total else 0,
-            },
-            "participants": [dict(row) for row in rows],
-        }
+    return {
+        "summary": {
+            "total": total,
+            "signed": signed,
+            "unsigned": total - signed,
+            "rate": round(signed * 100 / total, 1) if total else 0,
+        },
+        "participants": [dict(row) for row in rows],
+    }
+
+
+@app.get("/observe/<token>")
+def observer_page(token):
+    activity = get_observer_activity(token)
+    return render_template("observer.html", activity=activity, public_page=True)
+
+
+@app.get("/observe/<token>/participants")
+def observer_participants_api(token):
+    activity = get_observer_activity(token)
+    status = request.args.get("status", "all")
+    search = request.args.get("q", "").strip()
+    payload = participant_payload(activity["id"], status, search)
+    visible_fields = (
+        "name",
+        "identifier",
+        "phone",
+        "position",
+        "signed_in",
+        "sign_time",
+        "source",
+        "note",
     )
+    payload["participants"] = [
+        {field: participant[field] for field in visible_fields}
+        for participant in payload["participants"]
+    ]
+    return jsonify(payload)
 
 
 @app.post("/participants/<int:participant_id>/toggle")
@@ -493,6 +604,7 @@ def edit_participant(participant_id):
     name = str(payload.get("name", "")).strip()
     identifier = str(payload.get("identifier", "")).strip()
     phone = str(payload.get("phone", "")).strip()
+    position = str(payload.get("position", "")).strip()[:100]
     note = str(payload.get("note", "")).strip()[:200]
     if not name or not identifier:
         return jsonify({"ok": False, "message": "姓名和学号/工号不能为空。"}), 400
@@ -504,10 +616,10 @@ def edit_participant(participant_id):
             db.execute(
                 """
                 UPDATE participants
-                SET name = ?, identifier = ?, phone = ?, note = ?, updated_at = ?
+                SET name = ?, identifier = ?, phone = ?, position = ?, note = ?, updated_at = ?
                 WHERE id = ?
                 """,
-                (name, identifier, phone, note, now_text(), participant_id),
+                (name, identifier, phone, position, note, now_text(), participant_id),
             )
         except sqlite3.IntegrityError:
             return jsonify({"ok": False, "message": "该学号/工号已存在于本活动名单中。"}), 409
@@ -528,21 +640,33 @@ def delete_participant(participant_id):
 def export_results(activity_id):
     activity = get_activity(activity_id)
     status = request.args.get("status", "all")
+    return export_response(activity, status)
+
+
+@app.get("/observe/<token>/export.csv")
+def observer_export_results(token):
+    activity = get_observer_activity(token)
+    status = request.args.get("status", "all")
+    return export_response(activity, status)
+
+
+def export_response(activity, status="all"):
     condition = " AND signed_in = 0" if status == "unsigned" else ""
     with get_db() as db:
         rows = db.execute(
             f"SELECT * FROM participants WHERE activity_id = ?{condition} ORDER BY name COLLATE NOCASE",
-            (activity_id,),
+            (activity["id"],),
         ).fetchall()
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["姓名", "学号/工号", "手机号", "签到状态", "签到时间", "来源", "备注"])
+    writer.writerow(["姓名", "学号/工号", "手机号", "岗位", "签到状态", "签到时间", "来源", "备注"])
     for row in rows:
         writer.writerow(
             [
                 csv_safe(row["name"]),
                 csv_safe(row["identifier"]),
                 csv_safe(row["phone"]),
+                csv_safe(row["position"]),
                 "已签到" if row["signed_in"] else "未签到",
                 row["sign_time"] or "",
                 csv_safe(row["source"]),
