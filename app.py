@@ -408,7 +408,7 @@ def activity_qr(activity_id):
     qr = qrcode.QRCode(version=None, box_size=8, border=3)
     qr.add_data(sign_url)
     qr.make(fit=True)
-    image = qr.make_image(fill_color="#1f7a4d", back_color="white")
+    image = qr.make_image(fill_color="#A40A1E", back_color="white")
     buffer = io.BytesIO()
     image.save(buffer, format="PNG")
     buffer.seek(0)
