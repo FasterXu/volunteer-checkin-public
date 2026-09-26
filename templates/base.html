@@ -14,7 +14,7 @@
     <nav class="navbar navbar-expand-lg navbar-dark container-xl">
       <a class="navbar-brand d-flex align-items-center gap-2" {% if not public_page %}href="{{ url_for('admin') }}"{% endif %}>
         <span class="brand-mark">签</span>
-        <span><strong>志愿签到</strong><small>Volunteer Check-in</small></span>
+        <span><strong>签到系统</strong><small>Check-in System</small></span>
       </a>
       {% if not public_page %}<div class="ms-auto d-flex align-items-center gap-3">
         <span class="nav-caption d-none d-sm-inline">现场与电子签到中心</span>
@@ -29,8 +29,8 @@
   <footer class="site-footer">
     <div class="footer-green"></div>
     <div class="container-xl py-3 d-flex justify-content-between flex-wrap gap-2">
-      <span>Volunteer Sign &amp; On-Site Management System</span>
-      <span>轻量、实时、移动端适配</span>
+      <span>On-Site Management System</span>
+      <span>测试版本，仅供上科大使用</span>
     </div>
   </footer>
   {% block scripts %}{% endblock %}
