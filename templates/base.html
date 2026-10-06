@@ -3,23 +3,23 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#A40A1E">
-  <title>{% block title %}签到管理系统{% endblock %}</title>
+  <meta name="theme-color" content="#A40006">
+  <title>{% block title %}志愿者签到{% endblock %}</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet">
 </head>
 <body>
   <header class="site-header">
-    <nav class="navbar navbar-expand-lg navbar-dark container-xl">
-      <a class="navbar-brand d-flex align-items-center gap-2" {% if not public_page %}href="{{ url_for('admin') }}"{% endif %}>
-        <span class="brand-mark">签</span>
-        <span><strong>签到系统</strong><small>Check-in System</small></span>
+    <nav class="navbar navbar-expand-lg navbar-light container-xl">
+      <a class="navbar-brand d-flex align-items-center" {% if not public_page %}href="{{ url_for('admin') }}"{% endif %}>
+        <img class="brand-lockup" src="{{ url_for('static', filename='logo_red.svg') }}" alt="网站标志">
+        <span class="brand-system"><strong>志愿者签到</strong><small>VOLUNTEER CHECK-IN</small></span>
       </a>
       {% if not public_page %}<div class="ms-auto d-flex align-items-center gap-3">
         <span class="nav-caption d-none d-sm-inline">现场与电子签到中心</span>
-        <a class="btn btn-sm btn-outline-light" href="{{ url_for('admin') }}">管理后台</a>
-        {% if auth_enabled %}<form method="post" action="{{ url_for('logout') }}"><button class="btn btn-sm btn-outline-light">退出</button></form>{% endif %}
+        <a class="btn btn-sm header-action" href="{{ url_for('admin') }}">管理后台</a>
+        {% if auth_enabled %}<form method="post" action="{{ url_for('logout') }}"><button class="btn btn-sm header-action">退出</button></form>{% endif %}
       </div>{% endif %}
     </nav>
   </header>
@@ -29,8 +29,8 @@
   <footer class="site-footer">
     <div class="footer-green"></div>
     <div class="container-xl py-3 d-flex justify-content-between flex-wrap gap-2">
-      <span>On-Site Management System</span>
-      <span>测试版本，仅供上科大使用</span>
+      <span>VOLUNTEER CHECK-IN</span>
+      <span>志愿者签到</span>
     </div>
   </footer>
   {% block scripts %}{% endblock %}

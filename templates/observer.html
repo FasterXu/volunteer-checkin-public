@@ -12,6 +12,10 @@
           {% if activity.location %}<span>地点：{{ activity.location }}</span>{% endif %}
           {% if activity.start_time %}<span>开始：{{ activity.start_time|display_time }}</span>{% endif %}
           {% if activity.end_time %}<span>结束：{{ activity.end_time|display_time }}</span>{% endif %}
+          {% if activity.start_time %}<span>迟到规则：宽限 {{ activity.late_grace_minutes }} 分钟</span>{% else %}<span>迟到规则：未启用</span>{% endif %}
+          {% if activity.location_check_enabled %}<span>位置核验：{{ activity.location_radius }} 米范围</span>{% endif %}
+          {% if activity.passphrase_check_enabled %}<span>口令核验：已启用（{{ activity.passphrase_length }} 位）</span>{% endif %}
+          {% if activity.credential_check_enabled %}<span>电子凭证二次核验：已启用</span>{% endif %}
         </div>
         {% if activity.description %}<p class="event-description">{{ activity.description }}</p>{% endif %}
       </div>
@@ -20,6 +24,10 @@
       </span>
     </div>
     <div class="observer-notice">此页面为只读观察员视图。持有链接者可以查看并导出完整名单，请谨慎分享。</div>
+    {% if activity.credential_check_enabled %}<div class="observer-actions mt-3">
+      <button class="btn btn-outline-success" type="button" id="toggleCredentialVerifier">▣ 二次核验签到凭证</button>
+    </div>{% endif %}
+    {% if activity.credential_check_enabled %}{% include "_credential_verifier.html" %}{% endif %}
   </section>
 
   <div class="stats-grid mb-4" aria-label="签到统计">
@@ -29,6 +37,20 @@
     <article class="stat-card rate"><span>签到率</span><strong id="statRate">0%</strong><div class="rate-bar"><i id="rateBar"></i></div></article>
   </div>
 
+  <section class="panel group-summary-panel mb-4">
+    <div class="panel-heading">班次与岗位到岗统计</div>
+    <div class="panel-body group-summary-grid">
+      <div>
+        <h3>按班次</h3>
+        <div class="group-summary-list" id="shiftGroupSummary"><div class="group-summary-empty">正在载入…</div></div>
+      </div>
+      <div>
+        <h3>按岗位</h3>
+        <div class="group-summary-list" id="positionGroupSummary"><div class="group-summary-empty">正在载入…</div></div>
+      </div>
+    </div>
+  </section>
+
   <section class="panel">
     <div class="panel-heading table-heading">
       <span>签到记录</span>
@@ -37,12 +59,16 @@
     <div class="panel-body toolbar">
       <div class="search-box">
         <span>⌕</span>
-        <input id="searchInput" class="form-control" placeholder="搜索姓名、学号/工号、手机号或岗位">
+        <input id="searchInput" class="form-control" placeholder="搜索姓名、学号/工号、班次或岗位">
       </div>
+      <select class="form-select form-select-sm group-filter-select" id="shiftFilter" aria-label="按班次筛选"><option value="">全部班次</option></select>
+      <select class="form-select form-select-sm group-filter-select" id="positionFilter" aria-label="按岗位筛选"><option value="">全部岗位</option></select>
       <div class="btn-group filter-group" role="group">
         <button class="btn btn-sm btn-outline-secondary active" data-filter="all">全部</button>
         <button class="btn btn-sm btn-outline-success" data-filter="signed">已签到</button>
         <button class="btn btn-sm btn-outline-danger" data-filter="unsigned">未签到</button>
+        <button class="btn btn-sm btn-outline-warning" data-filter="late">迟到</button>
+        <button class="btn btn-sm btn-outline-secondary" data-filter="exception">异常</button>
       </div>
       <a id="exportLink" class="btn btn-sm btn-success ms-lg-auto" href="{{ url_for('observer_export_results', token=activity.observer_token) }}">⇩ 导出结果</a>
     </div>
@@ -53,12 +79,15 @@
           <th data-sort-column="name" aria-sort="none"><button class="table-sort" type="button" data-sort="name">姓名 <span aria-hidden="true">↕</span></button></th>
           <th data-sort-column="identifier" aria-sort="none"><button class="table-sort" type="button" data-sort="identifier">学号/工号 <span aria-hidden="true">↕</span></button></th>
           <th data-sort-column="phone" aria-sort="none"><button class="table-sort" type="button" data-sort="phone">联系电话 <span aria-hidden="true">↕</span></button></th>
+          <th data-sort-column="shift" aria-sort="none"><button class="table-sort" type="button" data-sort="shift">班次 <span aria-hidden="true">↕</span></button></th>
           <th data-sort-column="position" aria-sort="none"><button class="table-sort" type="button" data-sort="position">岗位 <span aria-hidden="true">↕</span></button></th>
           <th data-sort-column="signed_in" aria-sort="none"><button class="table-sort" type="button" data-sort="signed_in">签到状态 <span aria-hidden="true">↕</span></button></th>
+          <th data-sort-column="attendance_status" aria-sort="none"><button class="table-sort" type="button" data-sort="attendance_status">考勤状态 <span aria-hidden="true">↕</span></button></th>
           <th data-sort-column="sign_time" aria-sort="none"><button class="table-sort" type="button" data-sort="sign_time">签到时间 <span aria-hidden="true">↕</span></button></th>
+          <th data-sort-column="location_status" aria-sort="none"><button class="table-sort" type="button" data-sort="location_status">位置核验 <span aria-hidden="true">↕</span></button></th>
           <th data-sort-column="source_note" aria-sort="none"><button class="table-sort" type="button" data-sort="source_note">来源 / 备注 <span aria-hidden="true">↕</span></button></th>
         </tr></thead>
-        <tbody id="participantRows"><tr><td colspan="8" class="loading-cell">正在载入名单…</td></tr></tbody>
+        <tbody id="participantRows"><tr><td colspan="11" class="loading-cell">正在载入名单…</td></tr></tbody>
       </table>
     </div>
   </section>
@@ -71,6 +100,17 @@ window.OBSERVER_CONFIG = {
   participantsUrl: {{ url_for('observer_participants_api', token=activity.observer_token)|tojson }},
   exportUrl: {{ url_for('observer_export_results', token=activity.observer_token)|tojson }}
 };
+{% if activity.credential_check_enabled %}
+window.CREDENTIAL_VERIFY_CONFIG = {
+  verifyUrl: {{ url_for('observer_verify_credential', token=activity.observer_token)|tojson }}
+};
+{% endif %}
 </script>
+{% if activity.credential_check_enabled %}
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+{% endif %}
 <script src="{{ url_for('static', filename='observer.js') }}"></script>
+{% if activity.credential_check_enabled %}
+<script src="{{ url_for('static', filename='credential-verifier.js') }}"></script>
+{% endif %}
 {% endblock %}

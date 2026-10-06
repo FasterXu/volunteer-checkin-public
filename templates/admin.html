@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}签到管理后台{% endblock %}
+{% block title %}志愿者签到 · 管理后台{% endblock %}
 
 {% block content %}
 <div class="container-xl py-4 py-lg-5">
@@ -18,7 +18,7 @@
   {% endwith %}
 
   <div class="row g-4">
-    <aside class="col-lg-3">
+    <aside class="col-lg-3 col-xl-2">
       <section class="panel sticky-lg-top side-panel">
         <div class="panel-heading d-flex align-items-center justify-content-between">
           <span>活动列表</span>
@@ -52,15 +52,53 @@
             <input class="form-control mb-2" type="datetime-local" name="start_time">
             <label class="form-label">结束时间</label>
             <input class="form-control mb-2" type="datetime-local" name="end_time">
+            <label class="form-label">迟到宽限（分钟）</label>
+            <input class="form-control mb-1" type="number" name="late_grace_minutes" min="0" max="1440" value="0">
+            <small class="form-text d-block mb-2">未设置开始时间时，不判定迟到。</small>
             <label class="form-label">活动说明</label>
-            <textarea class="form-control mb-3" name="description" rows="2"></textarea>
+            <textarea class="form-control mb-2" name="description" rows="2"></textarea>
+            <div class="location-settings mb-3" id="createLocationSettings">
+              <div class="form-check form-switch mb-2">
+                <input class="form-check-input" type="checkbox" role="switch" id="createLocationEnabled" name="location_check_enabled" value="1" data-location-toggle="createLocationFields">
+                <label class="form-check-label" for="createLocationEnabled">启用位置范围核验</label>
+              </div>
+              <div id="createLocationFields" class="location-fields is-inactive">
+                <label class="form-label">签到点纬度 / 经度</label>
+                <div class="location-coordinate-grid mb-2">
+                  <input class="form-control" id="createLatitude" name="latitude" type="number" step="any" min="-90" max="90" placeholder="纬度">
+                  <input class="form-control" id="createLongitude" name="longitude" type="number" step="any" min="-180" max="180" placeholder="经度">
+                </div>
+                <label class="form-label">允许半径（米）</label>
+                <input class="form-control mb-2" name="location_radius" type="number" min="10" max="5000" value="200">
+                <button class="btn btn-sm btn-outline-secondary w-100 fill-current-location" type="button" data-latitude-target="createLatitude" data-longitude-target="createLongitude">使用我的当前位置</button>
+                <small class="form-text location-fill-status">开启后，用户需在范围内完成第二步定位。</small>
+              </div>
+            </div>
+            <div class="verification-settings passphrase-settings mb-3">
+              <div class="form-check form-switch mb-2">
+                <input class="form-check-input" type="checkbox" role="switch" id="createPassphraseEnabled" name="passphrase_check_enabled" value="1" data-passphrase-toggle="createPassphraseFields">
+                <label class="form-check-label" for="createPassphraseEnabled">启用签到口令核验</label>
+              </div>
+              <div id="createPassphraseFields" class="passphrase-fields is-inactive">
+                <label class="form-label" for="createPassphrase">签到口令</label>
+                <input class="form-control" id="createPassphrase" name="passphrase" type="password" maxlength="12" autocomplete="new-password" placeholder="最多 12 个字符，不含空格" disabled>
+                <small class="form-text">开启后，签到者将在位置核验之后输入口令；未开启位置核验时，口令为第二步。</small>
+              </div>
+            </div>
+            <div class="verification-settings mb-3">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" role="switch" id="createCredentialEnabled" name="credential_check_enabled" value="1">
+                <label class="form-check-label" for="createCredentialEnabled">启用电子凭证与二次核验</label>
+              </div>
+              <small class="form-text d-block mt-1">开启后，签到成功会生成电子凭证，管理员和观察员可扫码复核。</small>
+            </div>
             <button class="btn btn-success w-100">创建活动</button>
           </form>
         </details>
       </section>
     </aside>
 
-    <div class="col-lg-9">
+    <div class="col-lg-9 col-xl-10">
       {% if activity %}
       <section class="panel hero-panel mb-4">
         <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
@@ -70,6 +108,10 @@
             <div class="event-meta">
               <span>⌖ {{ activity.location or '地点待定' }}</span>
               <span>◷ {{ activity.start_time|display_time }} 至 {{ activity.end_time|display_time }}</span>
+              {% if activity.start_time %}<span>◴ 迟到规则：宽限 {{ activity.late_grace_minutes }} 分钟</span>{% else %}<span>◴ 未设置开始时间，不判定迟到</span>{% endif %}
+              {% if activity.location_check_enabled %}<span>◎ 位置核验：{{ activity.location_radius }} 米</span>{% endif %}
+              {% if activity.passphrase_check_enabled %}<span>◇ 口令核验：{{ activity.passphrase_length }} 位</span>{% endif %}
+              {% if activity.credential_check_enabled %}<span>▣ 电子凭证二次核验：已启用</span>{% endif %}
             </div>
             {% if activity.description %}<p class="event-description">{{ activity.description }}</p>{% endif %}
           </div>
@@ -96,6 +138,7 @@
             </button>
           </form>
           <button class="btn btn-outline-success" type="button" id="toggleQr">▦ 显示签到二维码</button>
+          {% if activity.credential_check_enabled %}<button class="btn btn-outline-success" type="button" id="toggleCredentialVerifier">▣ 二次核验凭证</button>{% endif %}
           <button class="btn btn-outline-secondary" type="button" id="toggleActivityEdit">✎ 修改活动信息</button>
           <a class="btn btn-outline-secondary" href="{{ url_for('observer_page', token=activity.observer_token) }}" target="_blank" rel="noopener">◉ 观察员页面</a>
           <button class="btn btn-outline-secondary" type="button" id="copyObserverLink" data-url="{{ url_for('observer_page', token=activity.observer_token) }}">复制观察员链接</button>
@@ -120,9 +163,66 @@
                 <label class="form-label">结束时间</label>
                 <input class="form-control" type="datetime-local" name="end_time" value="{{ activity.end_time or '' }}">
               </div>
+              <div class="col-md-6">
+                <label class="form-label">迟到宽限（分钟）</label>
+                <input class="form-control" type="number" name="late_grace_minutes" min="0" max="1440" value="{{ activity.late_grace_minutes or 0 }}">
+                <small class="form-text">超过“开始时间＋宽限分钟”才算迟到；未设置开始时间时不判定迟到。</small>
+              </div>
               <div class="col-12">
                 <label class="form-label">活动说明</label>
                 <textarea class="form-control" name="description" rows="2">{{ activity.description }}</textarea>
+              </div>
+              <div class="col-12">
+                <div class="location-settings" id="editLocationSettings">
+                  <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" role="switch" id="editLocationEnabled" name="location_check_enabled" value="1" data-location-toggle="editLocationFields" {% if activity.location_check_enabled %}checked{% endif %}>
+                    <label class="form-check-label" for="editLocationEnabled">启用位置范围核验</label>
+                  </div>
+                  <div id="editLocationFields" class="location-fields {% if not activity.location_check_enabled %}is-inactive{% endif %}">
+                    <div class="row g-2">
+                      <div class="col-md-5">
+                        <label class="form-label">签到点纬度</label>
+                        <input class="form-control" id="editLatitude" name="latitude" type="number" step="any" min="-90" max="90" value="{{ activity.latitude if activity.latitude is not none else '' }}">
+                      </div>
+                      <div class="col-md-5">
+                        <label class="form-label">签到点经度</label>
+                        <input class="form-control" id="editLongitude" name="longitude" type="number" step="any" min="-180" max="180" value="{{ activity.longitude if activity.longitude is not none else '' }}">
+                      </div>
+                      <div class="col-md-2">
+                        <label class="form-label">半径（米）</label>
+                        <input class="form-control" name="location_radius" type="number" min="10" max="5000" value="{{ activity.location_radius or 200 }}">
+                      </div>
+                    </div>
+                    <div class="d-flex align-items-center flex-wrap gap-2 mt-2">
+                      <button class="btn btn-sm btn-outline-secondary fill-current-location" type="button" data-latitude-target="editLatitude" data-longitude-target="editLongitude">使用我的当前位置</button>
+                      <small class="form-text location-fill-status">位置数据仅用于设置活动签到范围。</small>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-12">
+                <div class="verification-settings passphrase-settings">
+                  <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" role="switch" id="editPassphraseEnabled" name="passphrase_check_enabled" value="1" data-passphrase-toggle="editPassphraseFields" {% if activity.passphrase_check_enabled %}checked{% endif %}>
+                    <label class="form-check-label" for="editPassphraseEnabled">启用签到口令核验</label>
+                  </div>
+                  <div id="editPassphraseFields" class="passphrase-fields {% if not activity.passphrase_check_enabled %}is-inactive{% endif %}">
+                    <label class="form-label" for="editPassphrase">签到口令</label>
+                    <input class="form-control" id="editPassphrase" name="passphrase" type="password" maxlength="12" autocomplete="new-password"
+                           placeholder="{% if activity.passphrase_check_enabled %}已设置 {{ activity.passphrase_length }} 位口令；留空保持不变{% else %}最多 12 个字符，不含空格{% endif %}"
+                           {% if not activity.passphrase_check_enabled %}disabled{% endif %}>
+                    <small class="form-text">系统不显示已保存的口令明文。输入新口令可替换；关闭开关将清除原口令。</small>
+                  </div>
+                </div>
+              </div>
+              <div class="col-12">
+                <div class="verification-settings">
+                  <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" role="switch" id="editCredentialEnabled" name="credential_check_enabled" value="1" {% if activity.credential_check_enabled %}checked{% endif %}>
+                    <label class="form-check-label" for="editCredentialEnabled">启用电子凭证与二次核验</label>
+                  </div>
+                  <small class="form-text d-block mt-1">关闭后不再生成或核验凭证；重新开启时会为已签到人员补生成。</small>
+                </div>
               </div>
               <div class="col-12 d-flex justify-content-end gap-2">
                 <button class="btn btn-outline-secondary" type="button" id="cancelActivityEdit">取消</button>
@@ -140,6 +240,7 @@
             <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('activity_qr', activity_id=activity.id) }}" download>下载二维码</a>
           </div>
         </div>
+        {% if activity.credential_check_enabled %}{% include "_credential_verifier.html" %}{% endif %}
       </section>
 
       <div class="stats-grid mb-4" aria-label="签到统计">
@@ -149,16 +250,30 @@
         <article class="stat-card rate"><span>签到率</span><strong id="statRate">0%</strong><div class="rate-bar"><i id="rateBar"></i></div></article>
       </div>
 
+      <section class="panel group-summary-panel mb-4">
+        <div class="panel-heading">班次与岗位到岗统计</div>
+        <div class="panel-body group-summary-grid">
+          <div>
+            <h3>按班次</h3>
+            <div class="group-summary-list" id="shiftGroupSummary"><div class="group-summary-empty">正在载入…</div></div>
+          </div>
+          <div>
+            <h3>按岗位</h3>
+            <div class="group-summary-list" id="positionGroupSummary"><div class="group-summary-empty">正在载入…</div></div>
+          </div>
+        </div>
+      </section>
+
       <section class="panel mb-4">
         <div class="panel-heading">名单导入</div>
         <div class="panel-body">
           <form class="upload-row" method="post" enctype="multipart/form-data" action="{{ url_for('upload_roster', activity_id=activity.id) }}">
-            <div>
-              <label class="form-label">上传 CSV / XLSX 名单</label>
+            <label class="form-label">上传 CSV / XLSX 名单</label>
+            <div class="upload-controls">
               <input class="form-control" type="file" name="roster" accept=".csv,.xlsx" required>
-              <small class="form-text">必填表头：姓名、学号/工号；可选：手机号、岗位。重复编号将更新资料并保留签到状态。</small>
+              <button class="btn btn-success">上传并导入</button>
             </div>
-            <button class="btn btn-success">上传并导入</button>
+            <small class="form-text">必填表头：姓名、学号/工号；可选：手机号、班次、岗位。相同班次或岗位会自动分组；重复编号将更新资料并保留签到状态。</small>
           </form>
         </div>
       </section>
@@ -171,12 +286,16 @@
         <div class="panel-body toolbar">
           <div class="search-box">
             <span>⌕</span>
-            <input id="searchInput" class="form-control" placeholder="搜索姓名、学号/工号、手机号或岗位">
+            <input id="searchInput" class="form-control" placeholder="搜索姓名、学号/工号、班次或岗位">
           </div>
+          <select class="form-select form-select-sm group-filter-select" id="shiftFilter" aria-label="按班次筛选"><option value="">全部班次</option></select>
+          <select class="form-select form-select-sm group-filter-select" id="positionFilter" aria-label="按岗位筛选"><option value="">全部岗位</option></select>
           <div class="btn-group filter-group" role="group">
             <button class="btn btn-sm btn-outline-secondary active" data-filter="all">全部</button>
             <button class="btn btn-sm btn-outline-success" data-filter="signed">已签到</button>
             <button class="btn btn-sm btn-outline-danger" data-filter="unsigned">未签到</button>
+            <button class="btn btn-sm btn-outline-warning" data-filter="late">迟到</button>
+            <button class="btn btn-sm btn-outline-secondary" data-filter="exception">异常</button>
           </div>
           <a id="exportLink" class="btn btn-sm btn-success ms-lg-auto" href="{{ url_for('export_results', activity_id=activity.id) }}">⇩ 导出结果</a>
         </div>
@@ -187,13 +306,16 @@
               <th data-sort-column="name" aria-sort="none"><button class="table-sort" type="button" data-sort="name">姓名 <span aria-hidden="true">↕</span></button></th>
               <th data-sort-column="identifier" aria-sort="none"><button class="table-sort" type="button" data-sort="identifier">学号/工号 <span aria-hidden="true">↕</span></button></th>
               <th class="d-none d-md-table-cell" data-sort-column="phone" aria-sort="none"><button class="table-sort" type="button" data-sort="phone">联系电话 <span aria-hidden="true">↕</span></button></th>
+              <th data-sort-column="shift" aria-sort="none"><button class="table-sort" type="button" data-sort="shift">班次 <span aria-hidden="true">↕</span></button></th>
               <th data-sort-column="position" aria-sort="none"><button class="table-sort" type="button" data-sort="position">岗位 <span aria-hidden="true">↕</span></button></th>
               <th data-sort-column="signed_in" aria-sort="none"><button class="table-sort" type="button" data-sort="signed_in">签到状态 <span aria-hidden="true">↕</span></button></th>
+              <th data-sort-column="attendance_status" aria-sort="none"><button class="table-sort" type="button" data-sort="attendance_status">考勤状态 <span aria-hidden="true">↕</span></button></th>
               <th class="d-none d-sm-table-cell" data-sort-column="sign_time" aria-sort="none"><button class="table-sort" type="button" data-sort="sign_time">签到时间 <span aria-hidden="true">↕</span></button></th>
+              <th data-sort-column="location_status" aria-sort="none"><button class="table-sort" type="button" data-sort="location_status">位置核验 <span aria-hidden="true">↕</span></button></th>
               <th class="d-none d-lg-table-cell" data-sort-column="source_note" aria-sort="none"><button class="table-sort" type="button" data-sort="source_note">来源 / 备注 <span aria-hidden="true">↕</span></button></th>
               <th>操作</th>
             </tr></thead>
-            <tbody id="participantRows"><tr><td colspan="9" class="loading-cell">正在载入名单…</td></tr></tbody>
+            <tbody id="participantRows"><tr><td colspan="12" class="loading-cell">正在载入名单…</td></tr></tbody>
           </table>
         </div>
       </section>
@@ -211,6 +333,8 @@
           <input class="form-control mb-3" id="editParticipantIdentifier" required>
           <label class="form-label" for="editParticipantPhone">手机号</label>
           <input class="form-control mb-3" id="editParticipantPhone" inputmode="tel">
+          <label class="form-label" for="editParticipantShift">班次</label>
+          <input class="form-control mb-3" id="editParticipantShift" maxlength="100" placeholder="例：上午班">
           <label class="form-label" for="editParticipantPosition">岗位</label>
           <input class="form-control mb-3" id="editParticipantPosition" maxlength="100">
           <label class="form-label" for="editParticipantNote">备注</label>
@@ -242,9 +366,23 @@ window.SIGNIN_CONFIG = {
   participantsUrl: {{ url_for('participants_api', activity_id=activity.id)|tojson }},
   toggleUrlPattern: {{ url_for('toggle_participant', participant_id=0)|tojson }},
   participantUrlPattern: {{ url_for('edit_participant', participant_id=0)|tojson }},
+  credentialEnabled: {{ 'true' if activity.credential_check_enabled else 'false' }},
+  credentialUrlPattern: {{ url_for('credential_page', token='TOKEN_PLACEHOLDER')|tojson }},
   exportUrl: {{ url_for('export_results', activity_id=activity.id)|tojson }}
 };
-</script>
-<script src="{{ url_for('static', filename='admin.js') }}"></script>
+{% if activity.credential_check_enabled %}
+window.CREDENTIAL_VERIFY_CONFIG = {
+  verifyUrl: {{ url_for('admin_verify_credential', activity_id=activity.id)|tojson }}
+};
 {% endif %}
+</script>
+{% if activity.credential_check_enabled %}
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+{% endif %}
+<script src="{{ url_for('static', filename='admin.js') }}"></script>
+{% if activity.credential_check_enabled %}
+<script src="{{ url_for('static', filename='credential-verifier.js') }}"></script>
+{% endif %}
+{% endif %}
+<script src="{{ url_for('static', filename='admin-location.js') }}"></script>
 {% endblock %}

@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}管理员登录 · 签到系统{% endblock %}
+{% block title %}志愿者签到 · 管理员登录{% endblock %}
 
 {% block content %}
 <div class="login-shell">
   <section class="panel login-card">
-    <div class="login-mark">签</div>
+    <img class="login-brand" src="{{ url_for('static', filename='logo_red.svg') }}" alt="网站标志">
     <div class="eyebrow">ADMIN ACCESS</div>
     <h1>管理员登录</h1>
     <p>请输入部署时设置的后台管理密码。</p>
