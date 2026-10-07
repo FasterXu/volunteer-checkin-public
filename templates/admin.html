@@ -71,7 +71,7 @@
                 <label class="form-label">允许半径（米）</label>
                 <input class="form-control mb-2" name="location_radius" type="number" min="10" max="5000" value="200">
                 <button class="btn btn-sm btn-outline-secondary w-100 fill-current-location" type="button" data-latitude-target="createLatitude" data-longitude-target="createLongitude">使用我的当前位置</button>
-                <small class="form-text location-fill-status">开启后，用户需在范围内完成第二步定位。</small>
+                <small class="form-text location-fill-status">开启后，用户需在范围内完成签到。</small>
               </div>
             </div>
             <div class="verification-settings passphrase-settings mb-3">
@@ -82,7 +82,7 @@
               <div id="createPassphraseFields" class="passphrase-fields is-inactive">
                 <label class="form-label" for="createPassphrase">签到口令</label>
                 <input class="form-control" id="createPassphrase" name="passphrase" type="password" maxlength="12" autocomplete="new-password" placeholder="最多 12 个字符，不含空格" disabled>
-                <small class="form-text">开启后，签到者将在位置核验之后输入口令；未开启位置核验时，口令为第二步。</small>
+                <small class="form-text">开启后，用户需输入口令校验。</small>
               </div>
             </div>
             <div class="verification-settings mb-3">
